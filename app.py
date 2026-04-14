@@ -19,8 +19,8 @@ def fetch_data(ticker, period="2y"):
 def calculate_indicators(df):
     df["SMA50"] = df["Close"].rolling(50).mean()
     df["SMA100"] = df["Close"].rolling(100).mean()
-    df["High50"] = df["High"].rolling(50).max()
-    df["Low50"] = df["Low"].rolling(50).min()
+    df["High50"] = df["High"].shift(1).rolling(50).max()
+    df["Low50"] = df["Low"].shift(1).rolling(50).min()
     # ATR (20-day)
     df["TR"] = np.maximum(df["High"] - df["Low"],
                np.maximum(abs(df["High"] - df["Close"].shift()),
@@ -58,13 +58,13 @@ def run_backtest(df, portfolio_value=10_000_000):
         trend_down = sma50 < sma100
 
         if position == 0:
-            if trend_up and close >= high50:
+            if trend_up and close >= high50 * 0.995:  # slight tolerance
                 units = (equity * 0.002) / atr
                 position = units
                 entry_price = open_price
                 peak_since_entry = open_price
                 trailing_stop = entry_price - 3 * atr
-            elif trend_down and close <= low50:
+            elif trend_down and close <= low50 * 1.005:
                 units = (equity * 0.002) / atr
                 position = -units
                 entry_price = open_price
