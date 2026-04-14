@@ -84,7 +84,10 @@ def run_backtest(df, portfolio_value=10_000_000):  # 1 Cr = 10M INR
 
         equity_curve.append({"Date": row.name, "Equity": equity})
 
-    return pd.DataFrame(equity_curve).set_index("Date"), trades
+    eq_df = pd.DataFrame(equity_curve)
+    if eq_df.empty or "Date" not in eq_df.columns:
+         eq_df = pd.DataFrame({"Date": df.index, "Equity": [portfolio_value]*len(df)})
+    return eq_df.set_index("Date"), trades
 
 def calc_metrics(equity_df, trades):
     eq = equity_df["Equity"]
