@@ -28,8 +28,9 @@ def calculate_indicators(df):
     df["ATR"] = df["TR"].rolling(20).mean()
     return df
 
-def run_backtest(df, portfolio_value=10_000_000):  # 1 Cr = 10M INR
+def run_backtest(df, portfolio_value=10_000_000):
     df = df.copy().dropna()
+    df = df.reset_index()
     position = 0
     entry_price = 0
     trailing_stop = 0
@@ -42,51 +43,57 @@ def run_backtest(df, portfolio_value=10_000_000):  # 1 Cr = 10M INR
         row = df.iloc[i]
         prev = df.iloc[i - 1]
 
-        # TREND FILTER
-        trend_up = bool(prev["SMA50"].item() > prev["SMA100"].item())
-        trend_down = bool(prev["SMA50"].item() < prev["SMA100"].item())
-        if position == 0:
-            # LONG ENTRY: 50-day high breakout + trend filter
-            if trend_up and prev["Close"] >= prev["High50"]:
-                atr = prev["ATR"]
-                units = (equity * 0.002) / atr if atr > 0 else 0
-                position = units
-                entry_price = row["Open"]
-                peak_since_entry = entry_price
-                trailing_stop = entry_price - 3 * atr
+        sma50 = float(prev["SMA50"])
+        sma100 = float(prev["SMA100"])
+        close = float(prev["Close"])
+        high50 = float(prev["High50"])
+        low50 = float(prev["Low50"])
+        atr = float(prev["ATR"]) if float(prev["ATR"]) > 0 else 1
+        open_price = float(row["Open"])
+        high = float(row["High"])
+        low = float(row["Low"])
+        row_atr = float(row["ATR"]) if float(row["ATR"]) > 0 else 1
 
-            # SHORT ENTRY
-            elif trend_down and prev["Close"] <= prev["Low50"]:
-                atr = prev["ATR"]
-                units = (equity * 0.002) / atr if atr > 0 else 0
+        trend_up = sma50 > sma100
+        trend_down = sma50 < sma100
+
+        if position == 0:
+            if trend_up and close >= high50:
+                units = (equity * 0.002) / atr
+                position = units
+                entry_price = open_price
+                peak_since_entry = open_price
+                trailing_stop = entry_price - 3 * atr
+            elif trend_down and close <= low50:
+                units = (equity * 0.002) / atr
                 position = -units
-                entry_price = row["Open"]
-                peak_since_entry = entry_price
+                entry_price = open_price
+                peak_since_entry = open_price
                 trailing_stop = entry_price + 3 * atr
 
-        elif position > 0:  # IN LONG
-            peak_since_entry = max(peak_since_entry, row["High"])
-            trailing_stop = peak_since_entry - 3 * row["ATR"]
-            if row["Low"] <= trailing_stop:
+        elif position > 0:
+            peak_since_entry = max(peak_since_entry, high)
+            trailing_stop = peak_since_entry - 3 * row_atr
+            if low <= trailing_stop:
                 pnl = (trailing_stop - entry_price) * position
                 equity += pnl
                 trades.append(pnl)
                 position = 0
 
-        elif position < 0:  # IN SHORT
-            peak_since_entry = min(peak_since_entry, row["Low"])
-            trailing_stop = peak_since_entry + 3 * row["ATR"]
-            if row["High"] >= trailing_stop:
+        elif position < 0:
+            peak_since_entry = min(peak_since_entry, low)
+            trailing_stop = peak_since_entry + 3 * row_atr
+            if high >= trailing_stop:
                 pnl = (entry_price - trailing_stop) * abs(position)
                 equity += pnl
                 trades.append(pnl)
                 position = 0
 
-        equity_curve.append({"Date": row.name, "Equity": equity})
+        equity_curve.append({"Date": row["Date"], "Equity": equity})
 
     eq_df = pd.DataFrame(equity_curve)
     if eq_df.empty or "Date" not in eq_df.columns:
-         eq_df = pd.DataFrame({"Date": df.index, "Equity": [portfolio_value]*len(df)})
+        eq_df = pd.DataFrame({"Date": df["Date"], "Equity": [portfolio_value]*len(df)})
     return eq_df.set_index("Date"), trades
 
 def calc_metrics(equity_df, trades):
